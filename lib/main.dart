@@ -1,13 +1,16 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutterfcm02/models/push_notification.dart';
 import 'package:overlay_support/overlay_support.dart';
 
 void main() {
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({Key? key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     return OverlaySupport(
@@ -19,40 +22,66 @@ class MyApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         home: HomePage(),
       ),
+
     );
   }
 }
-
-
-
 class HomePage extends StatefulWidget {
+  const HomePage({Key? key}) : super(key: key);
+
   @override
   _HomePageState createState() => _HomePageState();
 }
 
 class _HomePageState extends State {
-  late int _totalNotifications;
+  late int _totalNotifications = 0;
   late final FirebaseMessaging _messaging;
   PushNotification? _notificationInfo;
+  @override
+  void initState() {
+    registerNotification();
+    checkForInitialMessage();
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      PushNotification notification = PushNotification(
+        title: message.notification?.title,
+        body: message.notification?.body,
+      );
+      setState(() {
+        _notificationInfo = notification;
+        _totalNotifications++;
+      });
+    });
 
+    super.initState();
+  }
+
+  checkForInitialMessage() async {
+    await Firebase.initializeApp();
+    RemoteMessage? initialMessage =
+    await FirebaseMessaging.instance.getInitialMessage();
+
+    if (initialMessage != null) {
+      PushNotification notification = PushNotification(
+        title: initialMessage.notification?.title,
+        body: initialMessage.notification?.body,
+      );
+      setState(() {
+        _notificationInfo = notification;
+        _totalNotifications++;
+      });
+    }
+  }
 
   void registerNotification() async {
     // 1. Initialize the Firebase app
     await Firebase.initializeApp();
-
-    FirebaseMessaging.instance.getToken().then((token)  {
+    FirebaseMessaging.instance.getToken().then((token) {
       print('FCM TOKEN:');
       print(token);
       print('END');
     });
-
-
-
-    // 2. Instantiate Firebase Messaging
     _messaging = FirebaseMessaging.instance;
-
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
     // 3. On iOS, this helps to take the user permissions
     NotificationSettings settings = await _messaging.requestPermission(
       alert: true,
@@ -60,7 +89,6 @@ class _HomePageState extends State {
       provisional: false,
       sound: true,
     );
-
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
       print('User granted permission');
 
@@ -76,7 +104,6 @@ class _HomePageState extends State {
           _notificationInfo = notification;
           _totalNotifications++;
         });
-
         if (_notificationInfo != null) {
           // For displaying the notification as an overlay
           showSimpleNotification(
@@ -88,57 +115,10 @@ class _HomePageState extends State {
           );
         }
       });
-
     } else {
       print('User declined or has not accepted permission');
     }
-
-
   }
-
-
-
-
-
-  @override
-  void initState() {
-    _totalNotifications = 0;
-
-
-    checkForInitialMessage() async {
-      await Firebase.initializeApp();
-      RemoteMessage? initialMessage =
-      await FirebaseMessaging.instance.getInitialMessage();
-
-      if (initialMessage != null) {
-        PushNotification notification = PushNotification(
-          title: initialMessage.notification?.title,
-          body: initialMessage.notification?.body,
-          dataTitle: initialMessage.data['title'],
-          dataBody: initialMessage.data['body'],
-
-        );
-        setState(() {
-          _notificationInfo = notification;
-          _totalNotifications++;
-        });
-      }
-    }
-
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      PushNotification notification = PushNotification(
-        title: message.notification?.title,
-        body: message.notification?.body,
-      );
-      setState(() {
-        _notificationInfo = notification;
-        _totalNotifications++;
-      });
-    });
-
-    super.initState();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -161,6 +141,7 @@ class _HomePageState extends State {
           NotificationBadge(totalNotifications: _totalNotifications),
           SizedBox(height: 16.0),
           // TODO: add the notification text here
+
           _notificationInfo != null
               ? Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -183,14 +164,12 @@ class _HomePageState extends State {
             ],
           )
               : Container(),
-
         ],
       ),
     );
+
   }
 }
-
-
 class NotificationBadge extends StatelessWidget {
   final int totalNotifications;
 
@@ -218,6 +197,9 @@ class NotificationBadge extends StatelessWidget {
   }
 }
 
+Future _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  print("Handling a background message: ${message.messageId}");
+}
 class PushNotification {
   PushNotification({
     this.title,
@@ -230,9 +212,5 @@ class PushNotification {
   String? body;
   String? dataTitle;
   String? dataBody;
-}
 
-
-Future _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  print("Handling a background message: ${message.messageId}");
 }
